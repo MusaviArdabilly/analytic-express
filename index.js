@@ -62,9 +62,9 @@ app.post("/track", rateLimiter, async (req, res) => {
 app.get("/analytics", async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT COUNT(*) AS views, page_url, referer, user_agent, ip_address
+            SELECT COUNT(*) AS views, referer
             FROM analytics 
-            GROUP BY page_url 
+            GROUP BY referer 
             ORDER BY views DESC
         `);
 
