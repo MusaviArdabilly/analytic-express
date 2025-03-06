@@ -37,34 +37,48 @@ const rateLimiter = (req, res, next) => {
     next();
 };
 
+const getGeoLocation = async (ip) => {
+  try {
+      const response = await axios.get(`http://ip-api.com/json/${ip}`);
+      return {
+          country: response.data.country || "Unknown",
+          city: response.data.city || "Unknown"
+      };
+  } catch (error) {
+      console.error("Geolocation error:", error);
+      return { country: "Unknown", city: "Unknown" };
+  }
+};
+
 app.post("/track", rateLimiter, async (req, res) => {
     const { page_url, referrer, user_agent } = req.body;
     const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
 
     if (!page_url) {
-        return res.status(400).json({ error: "page_url is required" });
+      return res.status(400).json({ error: "page_url is required" });
     }
 
     try {
-        await pool.query(
-            `INSERT INTO analytics (page_url, referrer, user_agent, ip_address, timestamp) 
-             VALUES ($1, $2, $3, $4, NOW())`,
-            [page_url, referrer || "Direct", user_agent || "Unknown", ip_address]
-        );
+      const { country, city } = await getGeoLocation(ip_address);
+      await pool.query(
+        `INSERT INTO analytics (page_url, referrer, user_agent, ip_address, country, city, timestamp) 
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [page_url, referrer || "Direct", user_agent || "Unknown", ip_address, country, city]
+      );
 
-        res.status(201).json({ message: "Analytics data logged" });
+      res.status(201).json({ message: "Analytics data logged" });
     } catch (error) {
-        console.error("Error logging analytics:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+      console.error("Error logging analytics:", error);
+      res.status(500).json({ error: "Internal Server Error" });
     }
 });
 
 app.get("/analytics", async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT COUNT(*) AS views, referer
+            SELECT COUNT(*) AS views, referrer
             FROM analytics 
-            GROUP BY referer 
+            GROUP BY referrer 
             ORDER BY views DESC
         `);
 
@@ -75,5 +89,5 @@ app.get("/analytics", async (req, res) => {
     }
 });
 
-// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-module.exports = app;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// module.exports = app;
