@@ -10,11 +10,7 @@ const RATE_LIMIT_MAX = process.env.RATE_LIMIT_MAX || 100;
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 
 app.use(express.json());
-app.use(cors({
-  origin: "*",  // Allow all origins
-  methods: ["GET", "POST", "OPTIONS"],  // Allow necessary HTTP methods
-  allowedHeaders: ["Content-Type", "Authorization"]  // Allow headers
-}));
+app.use(cors());
 
 const rateLimits = new Map();
 
@@ -66,7 +62,7 @@ app.post("/track", rateLimiter, async (req, res) => {
 app.get("/analytics", async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT COUNT(*) AS views, page_url 
+            SELECT COUNT(*) AS views, page_url, referer, user_agent, ip_address
             FROM analytics 
             GROUP BY page_url 
             ORDER BY views DESC
