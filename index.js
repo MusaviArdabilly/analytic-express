@@ -1,5 +1,5 @@
 const express = require("express");
-const pool = require("./db");
+const pool = require("./config/db.js");
 const dotenv = require("dotenv");
 const cors = require("cors");
 
@@ -75,4 +75,5 @@ app.get("/analytics", async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+module.exports = app;
