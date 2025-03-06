@@ -85,12 +85,22 @@ app.get("/analytics", async (req, res) => {
       ORDER BY timestamp DESC
     `);
 
-    res.json({total: result.rowCount, data: result.rows});
+    res.json({
+      total: result.rowCount,
+      data: result.rows.map(row => {
+        const timestampUTC = new Date(row.timestamp);
+        const jakartaTime = new Date(timestampUTC.getTime() + 14 * 60 * 60 * 1000);
+        return {
+          ...row,
+          timestamp: jakartaTime.toISOString().replace("T", " ").split(".")[0]
+        };
+      })
+    });
   } catch (error) {
     console.error("Error fetching analytics:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-// module.exports = app;
+// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+module.exports = app;
