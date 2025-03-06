@@ -15,79 +15,78 @@ app.use(cors());
 const rateLimits = new Map();
 
 const rateLimiter = (req, res, next) => {
-    const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-    const now = Date.now();
+  const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  const now = Date.now();
 
-    if (!rateLimits.has(ip_address)) {
-        rateLimits.set(ip_address, { count: 1, startTime: now });
+  if (!rateLimits.has(ip_address)) {
+    rateLimits.set(ip_address, { count: 1, startTime: now });
+  } else {
+    const entry = rateLimits.get(ip_address);
+    if (now - entry.startTime > RATE_LIMIT_WINDOW) {
+      // Reset count after time window
+      entry.count = 1;
+      entry.startTime = now;
+    } else if (entry.count >= RATE_LIMIT_MAX) {
+      return res.status(429).json({ error: "Too many requests, slow down!" });
     } else {
-        const entry = rateLimits.get(ip_address);
-        if (now - entry.startTime > RATE_LIMIT_WINDOW) {
-            // Reset count after time window
-            entry.count = 1;
-            entry.startTime = now;
-        } else if (entry.count >= RATE_LIMIT_MAX) {
-            return res.status(429).json({ error: "Too many requests, slow down!" });
-        } else {
-            entry.count++;
-        }
-        rateLimits.set(ip_address, entry);
+      entry.count++;
     }
+    rateLimits.set(ip_address, entry);
+  }
 
-    next();
+  next();
 };
 
 const getGeoLocation = async (ip) => {
   try {
-      const response = await axios.get(`http://ip-api.com/json/${ip}`);
-      return {
-          country: response.data.country || "Unknown",
-          city: response.data.city || "Unknown"
-      };
+    const response = await axios.get(`http://ip-api.com/json/${ip}`);
+    return {
+      country: response.data.country || "Unknown",
+      city: response.data.city || "Unknown"
+    };
   } catch (error) {
-      console.error("Geolocation error:", error);
-      return { country: "Unknown", city: "Unknown" };
+    console.error("Geolocation error:", error);
+    return { country: "Unknown", city: "Unknown" };
   }
 };
 
 app.post("/track", rateLimiter, async (req, res) => {
-    const { page_url, referrer, user_agent } = req.body;
-    const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  const { page_url, referrer, user_agent } = req.body;
+  const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
 
-    if (!page_url) {
-      return res.status(400).json({ error: "page_url is required" });
-    }
+  if (!page_url) {
+    return res.status(400).json({ error: "page_url is required" });
+  }
 
-    try {
-      const { country, city } = await getGeoLocation(ip_address);
-      await pool.query(
-        `INSERT INTO analytics (page_url, referrer, user_agent, ip_address, country, city, timestamp) 
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [page_url, referrer || "Direct", user_agent || "Unknown", ip_address, country, city]
-      );
+  try {
+    const { country, city } = await getGeoLocation(ip_address);
+    await pool.query(
+      `INSERT INTO analytics (page_url, referrer, user_agent, ip_address, country, city, timestamp) 
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+      [page_url, referrer || "Direct", user_agent || "Unknown", ip_address, country, city]
+    );
 
-      res.status(201).json({ message: "Analytics data logged" });
-    } catch (error) {
-      console.error("Error logging analytics:", error);
-      res.status(500).json({ error: "Internal Server Error" });
-    }
+    res.status(201).json({ message: "Analytics data logged" });
+  } catch (error) {
+    console.error("Error logging analytics:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 app.get("/analytics", async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT COUNT(*) AS views, referrer
-            FROM analytics 
-            GROUP BY referrer 
-            ORDER BY views DESC
-        `);
+  try {
+    const result = await pool.query(`
+      SELECT *
+      FROM analytics 
+      ORDER BY timestamp DESC
+    `);
 
-        res.json(result.rows);
-    } catch (error) {
-        console.error("Error fetching analytics:", error);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
+    res.json({total: result.rowCount, data: result.rows});
+  } catch (error) {
+    console.error("Error fetching analytics:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-// module.exports = app;
+// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+module.exports = app;
