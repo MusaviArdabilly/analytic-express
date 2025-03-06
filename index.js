@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("./config/db.js");
 const dotenv = require("dotenv");
 const cors = require("cors");
+const axios = require("axios");
 
 dotenv.config();
 const app = express();
@@ -40,6 +41,8 @@ const rateLimiter = (req, res, next) => {
 const getGeoLocation = async (ip) => {
   try {
     const response = await axios.get(`http://ip-api.com/json/${ip}`);
+    console.log('ip', ip)
+    console.log('response', response.data)
     return {
       country: response.data.country || "Unknown",
       city: response.data.city || "Unknown"
@@ -54,6 +57,7 @@ app.post("/track", rateLimiter, async (req, res) => {
   const { page_url, referrer, user_agent } = req.body;
   const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
 
+  console.log('ip_track', ip_address)
   if (!page_url) {
     return res.status(400).json({ error: "page_url is required" });
   }
@@ -88,5 +92,5 @@ app.get("/analytics", async (req, res) => {
   }
 });
 
-// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-module.exports = app;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// module.exports = app;
