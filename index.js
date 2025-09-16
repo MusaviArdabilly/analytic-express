@@ -84,6 +84,11 @@ app.post("/track", rateLimiter, async (req, res) => {
   }
 });
 
+// GET /analytics
+// GET /analytics?gmt7
+// GET /analytics?human
+// GET /analytics?gmt7&human
+
 app.get("/analytics", async (req, res) => {
   try {
     const { gmt7, human } = req.query;
@@ -99,21 +104,12 @@ app.get("/analytics", async (req, res) => {
     data = data.map((row) => {
       const date = new Date(row.timestamp);
 
-      // default: raw UTC
+      // Default UTC ISO
       let ts = date.toISOString();
 
-      if (gmt7) {
-        // Jakarta ISO string → shift and format
-        const jakarta = new Date(
-          date.toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
-        );
-        ts = jakarta.toISOString().replace("Z", "+07:00");
-      }
-
-      if (human) {
-        // Human-readable
+      if (gmt7 || human) {
         const formatter = new Intl.DateTimeFormat("en-GB", {
-          timeZone: gmt7 ? "Asia/Jakarta" : "UTC",
+          timeZone: "Asia/Jakarta",
           year: "numeric",
           month: "2-digit",
           day: "2-digit",
@@ -131,7 +127,13 @@ app.get("/analytics", async (req, res) => {
         const mi = parts.find((p) => p.type === "minute").value;
         const ss = parts.find((p) => p.type === "second").value;
 
-        ts = `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+        if (human) {
+          // Human-readable Jakarta
+          ts = `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+        } else if (gmt7) {
+          // Jakarta ISO-like with +07:00
+          ts = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}+07:00`;
+        }
       }
 
       return { ...row, timestamp: ts };
