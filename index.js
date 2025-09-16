@@ -41,11 +41,11 @@ const rateLimiter = (req, res, next) => {
 const getGeoLocation = async (ip) => {
   try {
     const response = await axios.get(`http://ip-api.com/json/${ip}`);
-    console.log('ip', ip)
-    console.log('response', response.data)
+    console.log("ip", ip);
+    console.log("response", response.data);
     return {
       country: response.data.country || "Unknown",
-      city: response.data.city || "Unknown"
+      city: response.data.city || "Unknown",
     };
   } catch (error) {
     console.error("Geolocation error:", error);
@@ -57,7 +57,7 @@ app.post("/track", rateLimiter, async (req, res) => {
   const { page_url, referrer, user_agent } = req.body;
   const ip_address = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
 
-  console.log('ip_track', ip_address)
+  console.log("ip_track", ip_address);
   if (!page_url) {
     return res.status(400).json({ error: "page_url is required" });
   }
@@ -67,7 +67,14 @@ app.post("/track", rateLimiter, async (req, res) => {
     await pool.query(
       `INSERT INTO analytics (page_url, referrer, user_agent, ip_address, country, city, timestamp) 
        VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-      [page_url, referrer || "Direct", user_agent || "Unknown", ip_address, country, city]
+      [
+        page_url,
+        referrer || "Direct",
+        user_agent || "Unknown",
+        ip_address,
+        country,
+        city,
+      ]
     );
 
     res.status(201).json({ message: "Analytics data logged" });
@@ -79,27 +86,61 @@ app.post("/track", rateLimiter, async (req, res) => {
 
 app.get("/analytics", async (req, res) => {
   try {
+    const { gmt7, human } = req.query;
+
     const result = await pool.query(`
       SELECT *
       FROM analytics 
       ORDER BY timestamp DESC
     `);
 
+    let data = result.rows;
+
+    data = data.map((row) => {
+      const date = new Date(row.timestamp);
+
+      // default: raw UTC
+      let ts = date.toISOString();
+
+      if (gmt7) {
+        // Jakarta ISO string → shift and format
+        const jakarta = new Date(
+          date.toLocaleString("en-US", { timeZone: "Asia/Jakarta" })
+        );
+        ts = jakarta.toISOString().replace("Z", "+07:00");
+      }
+
+      if (human) {
+        // Human-readable
+        const formatter = new Intl.DateTimeFormat("en-GB", {
+          timeZone: gmt7 ? "Asia/Jakarta" : "UTC",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+
+        const parts = formatter.formatToParts(date);
+        const yyyy = parts.find((p) => p.type === "year").value;
+        const mm = parts.find((p) => p.type === "month").value;
+        const dd = parts.find((p) => p.type === "day").value;
+        const hh = parts.find((p) => p.type === "hour").value;
+        const mi = parts.find((p) => p.type === "minute").value;
+        const ss = parts.find((p) => p.type === "second").value;
+
+        ts = `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+      }
+
+      return { ...row, timestamp: ts };
+    });
+
     res.json({
       total: result.rowCount,
-      data: result.rows
+      data,
     });
-    // res.json({
-    //   total: result.rowCount,
-    //   data: result.rows.map(row => {
-    //     const timestampUTC = new Date(row.timestamp);
-    //     const jakartaTime = new Date(timestampUTC.getTime() + 14 * 60 * 60 * 1000);
-    //     return {
-    //       ...row,
-    //       timestamp: jakartaTime.toISOString().replace("T", " ").split(".")[0]
-    //     };
-    //   })
-    // });
   } catch (error) {
     console.error("Error fetching analytics:", error);
     res.status(500).json({ error: "Internal Server Error" });
